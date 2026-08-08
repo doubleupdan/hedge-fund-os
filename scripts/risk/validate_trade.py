@@ -53,6 +53,9 @@ class ProposedTrade:
     proposed_stop_loss: Optional[Decimal]
     proposed_size: Decimal
     proposed_risk_pct: Optional[Decimal]
+    strategy_id: Optional[str]
+    signal_rsi: Optional[Decimal]
+    checklist_complete: Optional[bool]
 
 
 @dataclass
@@ -153,6 +156,64 @@ def check_single_symbol_exposure(trade: ProposedTrade, limits: RiskLimits,
     return None
 
 
+# -----------------------------------------------------------------------------
+# Strategy-specific hard rules
+#
+# Unlike the account-level checks above (which apply uniformly regardless
+# of strategy), these checks are gated to a specific strategy_name because
+# they encode rules stated explicitly in that strategy's own documentation
+# (see strategies.exit_rules / known_risk_flags for the Trendline
+# Strategy). A strategy_name lookup (rather than hardcoding a UUID) keeps
+# this readable and means the check still works if the strategy row is
+# ever recreated with a new id.
+# -----------------------------------------------------------------------------
+
+# AJTG Trendline Strategy: "Zero Tolerance Rule" per
+# schemas/postgres/010_trendline_strategy_correction_v4.sql -
+# RSI at 60 during a SELL is a hard, binding invalidation - not a
+# soft preference, not overridable by any other confirmation aligning.
+TRENDLINE_STRATEGY_NAME = "AJTG Trendline Trading Strategy"
+ZERO_TOLERANCE_SELL_RSI = Decimal("60")
+
+
+def check_zero_tolerance_rule(trade: ProposedTrade, strategy_name: Optional[str]) -> Optional[tuple]:
+    if strategy_name != TRENDLINE_STRATEGY_NAME:
+        return None  # rule is specific to this strategy, not universal
+    if trade.direction != "short":
+        return None  # rule applies to SELL trades only, per the strategy's own wording
+    if trade.signal_rsi is None:
+        return ("strategy_hard_rule_violation",
+                "AJTG Trendline Strategy SELL signal has no signal_rsi recorded — cannot check the Zero Tolerance Rule. Rejecting by default rather than assuming compliance.")
+    if trade.signal_rsi == ZERO_TOLERANCE_SELL_RSI:
+        return ("strategy_hard_rule_violation",
+                f"ZERO TOLERANCE RULE VIOLATION: RSI is at {trade.signal_rsi} on a SELL signal for the AJTG Trendline Strategy. "
+                f"Per the strategy's own binding rule, this trade is invalid regardless of any other confirmation. Hard block, no override path.")
+    return None
+
+
+def check_checklist_discipline(trade: ProposedTrade, strategy_name: Optional[str]) -> Optional[tuple]:
+    """
+    Per the AJTG Trading Journal's own binding rule: "All boxes must be
+    checked = VALID TRADE. Any deviation = NO TRADE." checklist_complete
+    is the code-enforceable signal for that rule. NULL means the
+    generating agent/script didn't report checklist status at all, which
+    for a checklist-governed strategy is itself treated as non-compliance
+    (fail closed, not fail open) rather than silently assuming the
+    checklist was followed.
+    """
+    if strategy_name != TRENDLINE_STRATEGY_NAME:
+        return None  # only strategies with a documented binding checklist rule are checked here
+    if trade.checklist_complete is None:
+        return ("checklist_incomplete",
+                "AJTG Trendline Strategy signal has no checklist_complete status recorded. Per the strategy's binding checklist rule, "
+                "a trade with unknown/unreported checklist status is treated as non-compliant. Rejecting by default.")
+    if trade.checklist_complete is False:
+        return ("checklist_incomplete",
+                "AJTG Trendline Strategy signal explicitly reports checklist_complete = false. Per the strategy's own binding rule "
+                "(\"all boxes must be checked = valid trade, any deviation = no trade\"), this trade is invalid.")
+    return None
+
+
 # NOTE: correlation exposure and news blackout checks require external data
 # (a correlation matrix and an economic calendar feed respectively) that
 # aren't wired up until the Phase 1 read-only market-data MCP server and a
@@ -184,7 +245,7 @@ def check_news_blackout_STUB(trade: ProposedTrade, limits: RiskLimits) -> Option
 def run_all_checks(trade: ProposedTrade, limits: RiskLimits, account_equity: Decimal,
                     realized_loss_today_pct: Decimal, realized_loss_week_pct: Decimal,
                     current_drawdown_pct: Decimal, current_open_positions: int,
-                    existing_symbol_exposure_pct: Decimal) -> ValidationResult:
+                    existing_symbol_exposure_pct: Decimal, strategy_name: Optional[str]) -> ValidationResult:
     violations = []
 
     checks_with_results = [
@@ -196,6 +257,8 @@ def run_all_checks(trade: ProposedTrade, limits: RiskLimits, account_equity: Dec
         check_max_account_drawdown(limits, current_drawdown_pct),
         check_max_open_positions(limits, current_open_positions),
         check_single_symbol_exposure(trade, limits, existing_symbol_exposure_pct),
+        check_zero_tolerance_rule(trade, strategy_name),
+        check_checklist_discipline(trade, strategy_name),
     ]
 
     for result in checks_with_results:
@@ -221,17 +284,26 @@ def run_all_checks(trade: ProposedTrade, limits: RiskLimits, account_equity: Dec
     return result
 
 
-def fetch_proposed_trade(conn, proposed_trade_id: str) -> ProposedTrade:
+def fetch_proposed_trade(conn, proposed_trade_id: str):
+    """Returns (ProposedTrade, strategy_name). strategy_name is fetched via
+    a join since it lives on the strategies table, not denormalized onto
+    proposed_trades — kept as a separate return value rather than added to
+    the dataclass to keep ProposedTrade a clean mirror of its own table."""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
-            SELECT id, account_id, symbol, asset_class, direction,
-                   proposed_entry_price, proposed_stop_loss, proposed_size, proposed_risk_pct
-            FROM proposed_trades WHERE id = %s
+            SELECT pt.id, pt.account_id, pt.symbol, pt.asset_class, pt.direction,
+                   pt.proposed_entry_price, pt.proposed_stop_loss, pt.proposed_size, pt.proposed_risk_pct,
+                   pt.strategy_id, pt.signal_rsi, pt.checklist_complete,
+                   s.strategy_name
+            FROM proposed_trades pt
+            LEFT JOIN strategies s ON s.id = pt.strategy_id
+            WHERE pt.id = %s
         """, (proposed_trade_id,))
         row = cur.fetchone()
         if row is None:
             raise ValueError(f"No proposed_trade found with id {proposed_trade_id}")
-        return ProposedTrade(**row)
+        strategy_name = row.pop("strategy_name")
+        return ProposedTrade(**row), strategy_name
 
 
 def fetch_risk_limits(conn, account_id: str) -> RiskLimits:
@@ -330,7 +402,7 @@ def main():
 
     conn = psycopg2.connect(database_url)
     try:
-        trade = fetch_proposed_trade(conn, args.proposed_trade_id)
+        trade, strategy_name = fetch_proposed_trade(conn, args.proposed_trade_id)
         limits = fetch_risk_limits(conn, trade.account_id)
         (equity, loss_today_pct, loss_week_pct, drawdown_pct,
          open_count, symbol_exposure) = fetch_account_context(conn, trade.account_id, trade.symbol)
@@ -339,7 +411,7 @@ def main():
             trade=trade, limits=limits, account_equity=equity,
             realized_loss_today_pct=loss_today_pct, realized_loss_week_pct=loss_week_pct,
             current_drawdown_pct=drawdown_pct, current_open_positions=open_count,
-            existing_symbol_exposure_pct=symbol_exposure,
+            existing_symbol_exposure_pct=symbol_exposure, strategy_name=strategy_name,
         )
 
         record_result(conn, trade, result)

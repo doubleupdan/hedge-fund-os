@@ -11,7 +11,7 @@ No proposed trade reaches a human approval queue — let alone an account —
 without passing a deterministic, auditable risk check first. This SOP
 describes what that gate does and does not do.
 
-## What this gate checks (Phase 1 coverage)
+## What this gate checks (current coverage)
 
 1. Is trading halted on this account? (circuit breaker state)
 2. Is the position size within `max_position_size_pct` of equity?
@@ -21,6 +21,9 @@ describes what that gate does and does not do.
 6. Has the account hit its `max_account_drawdown_pct`?
 7. Would this exceed `max_open_positions`?
 8. Would this push single-symbol exposure over `max_single_symbol_exposure_pct`?
+9. **Strategy-specific hard rules** (as of migrations 012–013): for signals tagged with a `strategy_id`, any hard rule documented on that strategy's own record is enforced in code, not just documentation. Currently implemented:
+   - **AJTG Trendline Strategy Zero Tolerance Rule**: RSI at 60 on a SELL signal is a hard block, no override path. Requires `proposed_trades.signal_rsi` and `.direction` to be populated — a signal missing `signal_rsi` on a SELL is rejected by default (fail closed) rather than assumed compliant.
+   - **AJTG Trendline Strategy checklist discipline** ("all boxes checked = valid, any deviation = no trade"): requires `proposed_trades.checklist_complete` to be explicitly `true`. `NULL` (unreported) or `false` both block.
 
 ## What this gate does NOT yet check (known Phase 1 gaps)
 
