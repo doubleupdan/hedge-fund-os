@@ -12,7 +12,8 @@
     "dist": "npm run vendor && electron-builder",
     "dist:linux": "npm run vendor && electron-builder --linux",
     "dist:mac": "npm run vendor && electron-builder --mac",
-    "dist:win": "npm run vendor && electron-builder --win"
+    "dist:win": "npm run vendor && electron-builder --win",
+    "dist:win:noadmin": "npm run vendor && electron-builder --win -c.win.signAndEditExecutable=false"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0"

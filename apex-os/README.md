@@ -51,6 +51,36 @@ npm run dist:linux    # .AppImage + .deb
 Output lands in `apex-os/dist/`. Build on the platform you're targeting —
 cross-compiling Electron apps needs extra toolchains and is not set up here.
 
+### Windows: "Cannot create symbolic link : A required privilege is not held"
+
+`npm run dist:win` can fail while unpacking `winCodeSign-2.6.0.7z`. That archive
+carries macOS symlinks (`libcrypto.dylib`, `libssl.dylib`), and creating a
+symlink on Windows needs a privilege standard accounts don't hold, so 7-Zip
+exits 2 and electron-builder retries four times and gives up.
+
+Note what this does *not* affect: the app is packaged before that step, so
+`dist\win-unpacked\APEX OS.exe` already exists and runs. Only the installer is
+missing.
+
+electron-builder pulls that bundle down for code signing and for editing the
+exe's icon/version resources. This build is unsigned and has no custom icon, so
+none of it is needed:
+
+```powershell
+npm run dist:win:noadmin
+```
+
+That passes `-c.win.signAndEditExecutable=false`, which skips the winCodeSign
+download entirely and builds the NSIS installer directly. No admin rights, no
+Developer Mode.
+
+The alternatives, if you'd rather keep the default path: turn on **Settings →
+Privacy & security → For developers → Developer Mode** (grants symlink creation
+to your normal account), or run the build from an Administrator PowerShell.
+Either makes plain `npm run dist:win` work. Switch back to it if you ever add a
+real icon or a signing certificate, since `dist:win:noadmin` skips embedding
+both.
+
 Note: `npm run dist` is unsigned. macOS Gatekeeper will need a right-click →
 Open on first launch, and Windows SmartScreen will warn. Code signing needs
 certificates you'd have to buy; for a single-operator internal tool that's
