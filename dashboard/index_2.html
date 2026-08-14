@@ -194,6 +194,12 @@ main{flex:1;padding:28px 32px 64px;}
 .rule-row:last-child{border-bottom:none;}
 .rule-row .rn{color:var(--text);font-weight:600;}
 .rule-row .status{display:inline-flex;align-items:center;gap:6px;}
+.acct-select-row{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.acct-select-row label{font-size:9.5px;text-transform:uppercase;letter-spacing:.14em;color:var(--text-3);}
+.acct-select{background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 12px;min-width:280px;cursor:pointer;}
+.acct-select:hover{border-color:var(--border-strong);}
+.acct-meta{display:flex;gap:14px;font-size:10.5px;color:var(--text-3);margin-left:auto;}
+.acct-meta b{color:var(--text-2);font-weight:600;}
 
 @media(max-width:1100px){.stat-row{grid-template-columns:repeat(2,1fr);}.brain-split{grid-template-columns:1fr;}.risk-grid{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:720px){.sidebar{transform:translateX(-100%);}.shell{margin-left:0;}}
@@ -252,6 +258,11 @@ main{flex:1;padding:28px 32px 64px;}
     <div class="page" id="page-risk">
       <div class="page-header"><div><div class="eyebrow">capital preservation</div><h1 class="page-title">Risk Desk</h1></div></div>
       <div class="banner"><b>Mission:</b> protect capital first. The Risk Office has standing authority to veto any proposed trade from any other agent. All limits below are enforced in code before a trade proposal can reach the approval queue — not advisory.</div>
+      <div class="acct-select-row">
+        <label for="acctSelect">Account</label>
+        <select class="acct-select" id="acctSelect"></select>
+        <div class="acct-meta" id="acctMeta"></div>
+      </div>
       <div class="risk-grid" id="riskGrid"></div>
       <div class="section-head"><span class="label">Active risk rules<span class="rule"></span></span></div>
       <div class="rule-table" id="ruleTable"></div>
@@ -488,24 +499,55 @@ renderVentureRow();renderOrg();
 document.getElementById('ventureRow').addEventListener('click',e=>{const p=e.target.closest('[data-v]');if(!p)return;activeAsset=p.dataset.v||null;renderVentureRow();renderOrg();});
 
 /* ---- RISK page ---- */
-document.getElementById('riskGrid').innerHTML=[
- ['Daily loss limit','0.0% used','ok','of 2.0% max — no positions open pre-launch'],
- ['Weekly drawdown','0.0% used','ok','of 5.0% max'],
- ['Monthly drawdown','0.0% used','ok','of 8.0% max'],
- ['Max correlation exposure','n/a','ok','no live positions to correlate'],
-].map(([l,v,st,s])=>'<div class="risk-box"><div class="rl">'+l+'</div><div class="rv '+st+'">'+v+'</div><div class="rs">'+s+'</div></div>').join('');
-
-const RULES=[
- ['Max position size (% of account)','2.0%','Hard limit','enforced'],
- ['Daily loss limit','2.0%','Hard limit','enforced'],
- ['Weekly drawdown limit','5.0%','Hard limit','enforced'],
- ['Monthly drawdown limit','8.0%','Hard limit — halts new trades','enforced'],
- ['Max correlated exposure (single theme)','15% of NAV','Soft limit — flags for review','enforced'],
- ['Max leverage per account','Per broker/account metadata','Hard limit','enforced'],
- ['Live execution without human approval','Not permitted','Policy','enforced'],
+/* Real account + risk_limits data, pulled directly from Supabase (hedge-fund-os,
+   project fhdxzdpaigxzknhjvvfo) as of 2026-08-12. Each account carries its own
+   real limits — position risk %, drawdown %, and daily/weekly losing-trade
+   circuit breakers — rather than one universal rule set. Some accounts use
+   "non-binding ceiling" values (100%, 999 positions) on fields whose real
+   control lives elsewhere (e.g. Flip Account's real constraint is its
+   pip-based SL + max_position_risk_pct, not max_position_size_pct) — see
+   schemas/postgres/016 and 017 for the full reasoning. Correlation and
+   news-blackout fields are null across the board: explicitly out of scope
+   for this repo per founder direction. */
+const ACCOUNTS=[
+ {id:'0df1cba3-ed44-4e63-b4b7-733807b58529',name:'Precision Summit Fund Master (301511)',broker:'LTI',role:'master',balance:0,equity:0,maxPositionSizePct:100,maxPositionRiskPct:10,dailyLossLimitPct:100,weeklyLossLimitPct:100,monthlyDrawdownLimitPct:100,maxAccountDrawdownPct:25,maxOpenPositions:999,maxDailyLosingTrades:2,maxWeeklyLosingTrades:5,maxCorrelatedExposurePct:null,maxSingleSymbolExposurePct:5,tradingHalted:false},
+ {id:'1550921b-f84b-432a-a89c-4df9e2f579ed',name:'AJTG Flip Account (48830)',broker:'LHFX',role:'standalone',balance:0,equity:0,maxPositionSizePct:100,maxPositionRiskPct:10,dailyLossLimitPct:100,weeklyLossLimitPct:100,monthlyDrawdownLimitPct:100,maxAccountDrawdownPct:25,maxOpenPositions:999,maxDailyLosingTrades:2,maxWeeklyLosingTrades:5,maxCorrelatedExposurePct:null,maxSingleSymbolExposurePct:100,tradingHalted:false,note:'Starting capital $150 confirmed for Sunday before market open — not yet reflected in balance field.'},
+ {id:'cd2db2d9-040c-43e9-ad87-2952289387ad',name:'AJTG Test Real Account (100076)',broker:'LTI',role:'standalone',balance:0,equity:0,maxPositionSizePct:100,maxPositionRiskPct:10,dailyLossLimitPct:100,weeklyLossLimitPct:100,monthlyDrawdownLimitPct:100,maxAccountDrawdownPct:25,maxOpenPositions:999,maxDailyLosingTrades:2,maxWeeklyLosingTrades:5,maxCorrelatedExposurePct:null,maxSingleSymbolExposurePct:5,tradingHalted:false},
+ {id:'608c4fe1-b8a7-4b43-a1d5-3519dd764f9b',name:'AJTG Test Real Account (100892)',broker:'LTI',role:'standalone',balance:0,equity:0,maxPositionSizePct:100,maxPositionRiskPct:10,dailyLossLimitPct:100,weeklyLossLimitPct:100,monthlyDrawdownLimitPct:100,maxAccountDrawdownPct:25,maxOpenPositions:999,maxDailyLosingTrades:2,maxWeeklyLosingTrades:5,maxCorrelatedExposurePct:null,maxSingleSymbolExposurePct:5,tradingHalted:false},
+ {id:'20264f9a-7885-4584-a1e9-a8901968a1e8',name:'AJTG 100-to-100k Challenge (00000)',broker:'Verity',role:'standalone',balance:0,equity:0,maxPositionSizePct:100,maxPositionRiskPct:10,dailyLossLimitPct:100,weeklyLossLimitPct:100,monthlyDrawdownLimitPct:100,maxAccountDrawdownPct:25,maxOpenPositions:999,maxDailyLosingTrades:2,maxWeeklyLosingTrades:5,maxCorrelatedExposurePct:null,maxSingleSymbolExposurePct:5,tradingHalted:false},
 ];
-document.getElementById('ruleTable').innerHTML='<div class="rule-row head"><span>Rule</span><span>Limit</span><span>Type</span><span>Status</span></div>'+
- RULES.map(([n,lim,type,st])=>'<div class="rule-row"><span class="rn">'+n+'</span><span>'+lim+'</span><span>'+type+'</span><span class="status"><span class="dot ok pulse"></span>'+st+'</span></div>').join('');
+let activeAccountId=ACCOUNTS[0].id;
+
+function fmtMoney(n){return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function renderAcctSelect(){
+  document.getElementById('acctSelect').innerHTML=ACCOUNTS.map(a=>'<option value="'+a.id+'"'+(a.id===activeAccountId?' selected':'')+'>'+a.name+' · '+a.broker+'</option>').join('');
+}
+function renderRisk(){
+  const a=ACCOUNTS.find(x=>x.id===activeAccountId)||ACCOUNTS[0];
+  document.getElementById('acctMeta').innerHTML='<span>balance <b>'+fmtMoney(a.balance)+'</b></span><span>equity <b>'+fmtMoney(a.equity)+'</b></span><span>role <b>'+a.role+'</b></span>'+(a.note?'<span style="color:var(--warn)">'+a.note+'</span>':'');
+
+  document.getElementById('riskGrid').innerHTML=[
+   ['Max position risk / trade',a.maxPositionRiskPct+'%','ok','of equity — pip-based SL, see rule table'],
+   ['Max account drawdown',a.maxAccountDrawdownPct+'%','ok','hard limit before halt'],
+   ['Daily losing-trade limit',a.maxDailyLosingTrades!=null?a.maxDailyLosingTrades+' trades':'n/a','ok','circuit breaker, not %-based'],
+   ['Weekly losing-trade limit',a.maxWeeklyLosingTrades!=null?a.maxWeeklyLosingTrades+' trades':'n/a','ok','circuit breaker, not %-based'],
+  ].map(([l,v,st,s])=>'<div class="risk-box"><div class="rl">'+l+'</div><div class="rv '+st+'">'+v+'</div><div class="rs">'+s+'</div></div>').join('');
+
+  const rules=[
+   ['Max position risk per trade',a.maxPositionRiskPct+'% of equity','Hard limit','enforced'],
+   ['Max account drawdown',a.maxAccountDrawdownPct+'%','Hard limit — halts new trades','enforced'],
+   ['Daily losing-trade circuit breaker',(a.maxDailyLosingTrades!=null?a.maxDailyLosingTrades+' losing trades/day':'not set'),'Hard limit','enforced'],
+   ['Weekly losing-trade circuit breaker',(a.maxWeeklyLosingTrades!=null?a.maxWeeklyLosingTrades+' losing trades/week':'not set'),'Hard limit','enforced'],
+   ['Max position size (% of equity)',a.maxPositionSizePct+'%','Non-binding ceiling — real control is position risk %','enforced'],
+   ['Max correlated exposure',a.maxCorrelatedExposurePct!=null?a.maxCorrelatedExposurePct+'%':'not evaluated','Out of scope for this repo','n/a'],
+   ['Max single-symbol exposure',a.maxSingleSymbolExposurePct+'%','Soft limit — flags for review','enforced'],
+   ['Live execution without human approval','Not permitted','Policy','enforced'],
+  ];
+  document.getElementById('ruleTable').innerHTML='<div class="rule-row head"><span>Rule</span><span>Limit</span><span>Type</span><span>Status</span></div>'+
+   rules.map(([n,lim,type,st])=>'<div class="rule-row"><span class="rn">'+n+'</span><span>'+lim+'</span><span>'+type+'</span><span class="status">'+(st==='enforced'?'<span class="dot ok pulse"></span>enforced':'<span class="dot off"></span>'+st)+'</span></div>').join('');
+}
+renderAcctSelect();renderRisk();
+document.getElementById('acctSelect').addEventListener('change',e=>{activeAccountId=e.target.value;renderRisk();});
 
 /* ---- BRAIN page ---- */
 const LAYERS=[
@@ -597,3 +639,4 @@ setTheme('dark');
 </script>
 </body>
 </html>
+</content>
