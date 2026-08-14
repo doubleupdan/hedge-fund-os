@@ -29,3 +29,10 @@ Thumbs.db
 # as loose files in the repo.
 docs/reports/**/*.local.*
 *.log
+
+# APEX OS desktop app — generated artefacts.
+# renderer/vendor/ is produced by `npm run vendor` (supabase-js bundle +
+# JetBrains Mono woff2). It is reproducible from package.json, so it is built
+# rather than committed.
+apex-os/dist/
+apex-os/renderer/vendor/

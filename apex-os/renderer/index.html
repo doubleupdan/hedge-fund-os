@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>APEX OS · Hedge Fund Agents / Org / Risk Brain</title>
+<!-- JetBrains Mono ships inside the app (renderer/vendor/fonts). The original
+     Google Fonts <link> is deliberately gone: it was an offline failure mode
+     and a third-party callout on every launch. -->
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<!-- =====================================================================
+     SIGN-IN GATE
+     Shown until a Supabase Auth session exists. Read access is granted to
+     the `authenticated` role only (migration 018) — an unauthenticated
+     copy of this app reads nothing.
+     ===================================================================== -->
+<!-- Not `hidden` by default: the gate covers the UI until the session check
+     resolves, so the app never flashes into view before auth is known. -->
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <div class="gate-brand">APEX OS</div>
+    <div class="gate-sub">v0.1 · Founder-Stage Build</div>
+    <form id="gateForm" autocomplete="on">
+      <div class="gate-intro">
+        Sign in with your Supabase account to load live account and risk data.
+        Your session is stored on this machine, so this is normally a one-time step.
+      </div>
+      <div class="gate-field">
+        <label for="gateEmail">Email</label>
+        <input type="email" id="gateEmail" autocomplete="username" spellcheck="false" required>
+      </div>
+      <div class="gate-field">
+        <label for="gatePassword">Password</label>
+        <input type="password" id="gatePassword" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="gate-submit" id="gateSubmit">Sign in</button>
+      <div class="gate-msg" id="gateMsg"></div>
+    </form>
+    <div class="gate-foot">
+      Read-only connection. This app has no write access to any table and no
+      ability to place, modify, or cancel an order.
+    </div>
+  </div>
+</div>
+
+<aside class="sidebar">
+  <div class="brand"><div class="brand-name">APEX OS</div><div class="brand-sub">v0.1 · Founder-Stage Build</div></div>
+  <nav class="nav" id="nav"></nav>
+  <div class="sidebar-foot">
+    <div class="line"><span class="dot off"></span> 15 agents defined · 0 running</div>
+    <div class="conn" id="connState"><span class="dot off"></span> signed out</div>
+    <div class="conn who" id="connWho"></div>
+    <button class="link-btn" id="signOutBtn">sign out</button>
+    <div class="dim">read-only · no execution path</div>
+  </div>
+</aside>
+
+<div class="shell">
+  <div class="topbar">
+    <div class="crumb"><span>apex-os</span><span style="opacity:.45">/</span><span class="here" id="crumb">agents</span></div>
+    <div class="top-actions">
+      <div class="theme-pills" id="themePills">
+        <button class="theme-pill" data-theme-set="dark"><i style="background:#3df08c"></i></button>
+        <button class="theme-pill" data-theme-set="light"><i style="background:#c96442"></i></button>
+        <button class="theme-pill" data-theme-set="midnight"><i style="background:#5ec9f8"></i></button>
+      </div>
+      <!-- Kept from the approved design. Disabled rather than removed: neither
+           has a backend yet, and a button that silently does nothing is worse
+           than one that says it isn't wired up. -->
+      <button class="icon-btn" disabled title="Global search — not implemented yet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button class="icon-btn" disabled title="Agent console — no agent runtime yet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></button>
+    </div>
+  </div>
+
+  <main><div class="content">
+
+    <!-- ========= AGENTS ========= -->
+    <div class="page active" id="page-agents">
+      <div class="page-header"><div><div class="eyebrow">runtime</div><h1 class="page-title">Agent Roster</h1></div></div>
+      <div class="banner mock"><b>Illustrative page.</b> All 15 agents below are <b>defined</b> — their roles, reporting lines and tool assignments are real design decisions recorded in this repo — but <b>none of them run yet</b>. There is no agent runtime wired up, so every "last check" line, the status dots, and the "open risk flags / scheduled reports" counters are hand-authored examples, not observations. The remaining ~185 roles are organizational placeholders that activate in Phase 4. No agent has standing authorization to place live trades; execution stays behind explicit human approval.</div>
+      <div class="conductor-bar">
+        <svg class="spark" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
+        <div class="body"><div class="h">Chief Executive AI · broadcast to every agent <span class="prov mock">no backend</span></div><div class="s">Fan-out orchestration · routes requests to the correct department lead, escalates risk flags to you directly</div></div>
+        <input placeholder="Broadcast a message to all agents…" disabled title="No agent runtime yet" />
+      </div>
+      <div class="stat-row" id="agentStats"></div>
+      <div id="deptSections"></div>
+    </div>
+
+    <!-- ========= ORG ========= -->
+    <div class="page" id="page-org">
+      <div class="page-header"><div><div class="eyebrow">workforce</div><h1 class="page-title">Org Chart</h1></div></div>
+      <div class="banner mock"><b>Structure real, activity illustrative.</b> The reporting lines, departments and role definitions shown here are the actual intended org design. The asset-coverage filters and status dots describe intent, not live agent state — nothing in this tree is currently executing.</div>
+      <div class="org-head-row" id="ventureRow"></div>
+      <div class="org-conductor"><div class="conductor-node">
+        <svg class="spark" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
+        <div class="n">Chief Executive AI</div><div class="r">CEO/CIO/COO/CTO · Orchestration &amp; Decision Support</div>
+      </div></div>
+      <div class="org-spine"></div>
+      <div class="dept-cols" id="deptCols"></div>
+    </div>
+
+    <!-- ========= RISK ========= -->
+    <div class="page" id="page-risk">
+      <div class="page-header">
+        <div><div class="eyebrow">capital preservation</div><h1 class="page-title">Risk Desk</h1></div>
+        <button class="refresh-btn" id="riskRefresh">refresh</button>
+      </div>
+      <div class="banner"><b>Mission:</b> protect capital first. The Risk Office has standing authority to veto any proposed trade from any other agent. The limits below are read live from the <b>risk_limits</b> table and are enforced in code by <b>scripts/risk/validate_trade.py</b> before a trade proposal can reach the approval queue — not advisory. This dashboard itself is read-only and enforces nothing.</div>
+
+      <div class="state" id="riskState" hidden></div>
+
+      <div id="riskBody" hidden>
+        <div class="acct-select-row">
+          <label for="acctSelect">Account</label>
+          <select class="acct-select" id="acctSelect"></select>
+          <div class="acct-meta" id="acctMeta"></div>
+        </div>
+        <div class="acct-note" id="acctNote" hidden></div>
+        <div class="risk-grid" id="riskGrid"></div>
+        <div class="section-head">
+          <span class="label">Active risk rules<span class="rule"></span></span>
+          <span id="riskStamp" style="font-size:10px;color:var(--text-3);white-space:nowrap"></span>
+        </div>
+        <div class="rule-table" id="ruleTable"></div>
+      </div>
+
+      <div class="section-head"><span class="label">Escalation procedure <span class="prov mock">designed, not yet automated</span><span class="rule"></span></span></div>
+      <div class="pipeline">
+        <div class="stage"><div class="sh"><span class="step">1</span><div><div class="st">Detect</div><div class="sc">Risk Officer AI</div></div></div><div class="body">Continuous check against the per-account drawdown limit, the daily and weekly losing-trade circuit breakers, and single-symbol concentration on every open position and proposed trade. Correlation exposure is deliberately out of scope.</div></div>
+        <div class="stage-arrow">breach →</div>
+        <div class="stage"><div class="sh"><span class="step">2</span><div><div class="st">Halt</div><div class="sc">automatic</div></div></div><div class="body">New trade proposals in the affected account/strategy are blocked automatically. Existing positions are flagged, not force-closed, pending review.</div></div>
+        <div class="stage-arrow">notify →</div>
+        <div class="stage"><div class="sh"><span class="step">3</span><div><div class="st">Escalate</div><div class="sc">to founder</div></div></div><div class="body">Direct notification with the breach, affected accounts, and recommended action. No autonomous override of a risk halt — human decision required.</div></div>
+      </div>
+    </div>
+
+    <!-- ========= BRAIN ========= -->
+    <div class="page is-mock" id="page-brain">
+      <div class="page-header"><div><div class="eyebrow">knowledge core</div><h1 class="page-title caret">Super Brain</h1></div></div>
+      <div class="banner mock"><b>Every number on this page is illustrative.</b> There is no ingest CLI, no embedding service, no pgvector index and no knowledge vault yet. The health scores (79/100 and 57), the storage-layer states, folder counts, doctor checks, query path and constellation are all hand-authored to show the intended shape of the feature. Nothing here is measured. The department/agent skeleton in the graph is the one real thing — it is drawn from the same roster as the Agent Roster page.</div>
+
+      <div class="section-head"><span class="label">Knowledge graph <span class="count">departments · agents</span> <span class="prov mock">illustrative</span><span class="rule"></span></span></div>
+      <div class="kg-wrap"><svg id="kgSvg" width="100%" height="300" viewBox="0 0 1200 300" preserveAspectRatio="xMidYMid meet"></svg></div>
+
+      <div class="brain-split">
+        <div class="brain-panel">
+          <div class="ph"><span><b>pillar health</b> — live roster + runs + SOP coverage</span><span class="prov mock">illustrative</span></div>
+          <div class="pbody"><svg id="radarSvg" width="360" height="360" viewBox="0 0 360 360"></svg></div>
+        </div>
+        <div class="brain-panel">
+          <div class="ph"><div style="display:flex;flex-direction:column;gap:4px"><span><b>doctor</b> — ok</span><span>last run 6m ago · knowledge-agent</span></div>
+            <div style="display:flex;flex-direction:column;gap:4px;text-align:right"><span><b>hybrid search</b> verified</span><span class="prov mock">illustrative</span></div></div>
+          <div class="pbody"><svg id="coreSvg" width="100%" height="340" viewBox="0 0 500 340" preserveAspectRatio="xMidYMid meet"></svg></div>
+        </div>
+      </div>
+
+      <div class="layers">
+        <div class="lh">Storage layers <span class="prov mock">illustrative</span></div>
+        <div id="layerList"></div>
+        <div class="lf"><span class="l"><b>doctor</b> — health 79/100</span><span style="color:var(--warn)">sync lag on 2 sources</span></div>
+      </div>
+
+      <div class="section-head"><span class="label">Pipeline <span class="count">source → structured memory</span> <span class="prov mock">planned</span><span class="rule"></span></span></div>
+      <div class="pipeline" style="margin-bottom:32px">
+        <div class="stage">
+          <div class="sh"><span class="step">1</span><div><div class="st">Markdown research vault</div><div class="sc">/knowledge-vault</div></div></div>
+          <div class="body">Every research note, SOP, decision log, and lessons-learned entry lands here first as plain <b style="color:var(--text)">.md</b> in the GitHub repo — version-controlled source of truth.</div>
+          <div class="folder-list" id="folderList"></div>
+        </div>
+        <div class="stage-arrow">sync ·<br>import →</div>
+        <div class="stage">
+          <div class="sh"><span class="step">2</span><div><div class="st">Ingest CLI</div><div class="sc">chunk · embed · route</div></div></div>
+          <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:30px;font-weight:700">79</span><span style="font-size:12px;color:var(--text-3)">/ 100 health</span></div>
+          <div class="check-list" id="checkList"></div>
+          <div class="cmd-tags" id="cmdTags"></div>
+        </div>
+        <div class="stage-arrow">embed ·<br>upsert →</div>
+        <div class="stage">
+          <div class="sh"><span class="step">3</span><div><div class="st">Postgres + pgvector</div><div class="sc">trades · research · decisions</div></div></div>
+          <div class="stat2"><div class="box"><div class="n">12</div><div class="l">live tables</div></div><div class="box"><div class="n">0</div><div class="l">trades logged (pre-launch)</div></div></div>
+          <div class="body">One database answers keyword and semantic queries across research notes, trade journals, and the decision log — every agent reads from the same source of truth. The pgvector half is not built yet.</div>
+        </div>
+      </div>
+
+      <div class="section-head"><span class="label">Query path <span class="prov mock">planned</span><span class="rule"></span></span></div>
+      <div class="query-path">
+        <div class="flow-step"><div class="ft">Question</div><div class="fd">Natural-language query from you or an agent run.</div></div>
+        <div class="stage-arrow">→</div>
+        <div class="flow-step"><div class="ft">Query expansion</div><div class="fd">Rewrites into search variants across research/trades/SOPs.</div></div>
+        <div class="stage-arrow">→</div>
+        <div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:8px">
+          <div class="flow-step"><div class="ft">Keyword search</div><div class="fd">Postgres full-text match.</div></div>
+          <div class="flow-step"><div class="ft">Vector search</div><div class="fd">pgvector nearest-neighbor over embeddings.</div></div>
+        </div>
+        <div class="stage-arrow">→</div>
+        <div class="flow-step"><div class="ft">Fusion + rank</div><div class="fd">Merged, ranked snippets returned to the requesting agent.</div></div>
+        <div class="stage-arrow">→</div>
+        <div class="flow-step"><div class="ft">Cited answer</div><div class="fd">Response includes source doc so nothing is untraceable.</div></div>
+      </div>
+      <div style="margin-top:8px" class="query-path">
+        <div class="flow-step dashed"><div class="ft">Fallback: local grep</div><div class="fd">If the vector store is unreachable, APEX OS greps the markdown vault directly — fewer smarts, zero downtime.</div></div>
+      </div>
+    </div>
+
+  </div></main>
+</div>
+
+<script src="./vendor/supabase.js"></script>
+<script src="./data.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

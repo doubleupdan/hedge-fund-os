@@ -1,0 +1,57 @@
+{
+  "name": "apex-os",
+  "productName": "APEX OS",
+  "version": "0.1.0",
+  "description": "Internal command centre for Precision Summit Tech / AJTG — agent roster, org chart, risk desk, knowledge brain.",
+  "private": true,
+  "author": "Precision Summit Tech",
+  "main": "electron/main.js",
+  "scripts": {
+    "vendor": "node scripts/vendor.mjs",
+    "start": "npm run vendor && electron .",
+    "dist": "npm run vendor && electron-builder",
+    "dist:linux": "npm run vendor && electron-builder --linux",
+    "dist:mac": "npm run vendor && electron-builder --mac",
+    "dist:win": "npm run vendor && electron-builder --win"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0"
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.2.5",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0"
+  },
+  "build": {
+    "appId": "tech.precisionsummit.apexos",
+    "productName": "APEX OS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "!renderer/vendor/fonts/*.woff"
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office"
+    }
+  }
+}
