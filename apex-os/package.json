@@ -8,6 +8,7 @@
   "main": "electron/main.js",
   "scripts": {
     "vendor": "node scripts/vendor.mjs",
+    "icon": "node scripts/make-icon.mjs",
     "start": "npm run vendor && electron .",
     "dist": "npm run vendor && electron-builder",
     "dist:linux": "npm run vendor && electron-builder --linux",
@@ -33,21 +34,25 @@
     "files": [
       "electron/**/*",
       "renderer/**/*",
+      "build/icon.png",
       "!renderer/vendor/fonts/*.woff"
     ],
     "mac": {
       "category": "public.app-category.finance",
+      "icon": "build/icon.png",
       "target": [
         "dmg",
         "zip"
       ]
     },
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis"
       ]
     },
     "linux": {
+      "icon": "build/icon.png",
       "target": [
         "AppImage",
         "deb"

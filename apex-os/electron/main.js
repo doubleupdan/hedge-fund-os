@@ -51,6 +51,9 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#050807', // matches the dark theme's --bg; avoids a white flash on open
     title: 'APEX OS',
+    // Window/taskbar icon. A packaged Windows build takes its icon from the
+    // exe resources instead, but this covers `npm start` and Linux.
+    icon: path.join(__dirname, '../build/icon.png'),
     show: false,
     autoHideMenuBar: true,
     webPreferences: {

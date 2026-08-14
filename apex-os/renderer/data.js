@@ -78,9 +78,22 @@ const int = (v) => (v === null || v === undefined ? null : parseInt(v, 10));
  * as though Supabase returned it.
  */
 const ACCOUNT_NOTES = {
-  'AJTG Flip Account (48830)':
-    'Starting capital $150 confirmed for Sunday before market open. Not yet reflected in the balance field below.',
+  'AJTG Flip Account (48830)': {
+    text: 'Starting capital $150 confirmed for Sunday before market open. Not yet reflected in the balance field below.',
+    // Self-clearing. This note exists only to explain a $0 balance, so it
+    // disappears the moment a real balance is recorded — no code change and no
+    // stale annotation outliving the fact it described. See
+    // sops/operations/funding-an-account.md for the funding procedure.
+    onlyWhileBalanceZero: true,
+  },
 };
+
+function noteFor(accountName, balance) {
+  const entry = ACCOUNT_NOTES[accountName];
+  if (!entry) return null;
+  if (entry.onlyWhileBalanceZero && balance !== 0) return null;
+  return entry.text;
+}
 
 /**
  * Loads every account that has a risk_limits row, with its limits embedded.
@@ -143,7 +156,7 @@ APEX.fetchAccounts = async function fetchAccounts() {
         haltedReason: rl.halted_reason || null,
         limitsUpdatedAt: rl.updated_at || null,
 
-        note: ACCOUNT_NOTES[row.account_name] || null,
+        note: noteFor(row.account_name, num(row.current_balance)),
       };
     })
     .filter(Boolean)
