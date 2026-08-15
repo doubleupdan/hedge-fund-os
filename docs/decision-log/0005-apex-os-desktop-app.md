@@ -1,9 +1,10 @@
 # 0005 — APEX OS as an Electron desktop app, gated behind Supabase Auth
 
 **Date:** 2026-08-14
-**Status:** Accepted
+**Status:** Accepted — implemented and verified on the founder's machine 2026-08-15
 **Supersedes:** nothing
-**Related:** `schemas/postgres/018_rls_authenticated_read_policies.sql`, `apex-os/`
+**Related:** `schemas/postgres/018_rls_authenticated_read_policies.sql`, `apex-os/`,
+`sops/operations/funding-an-account.md`
 
 ---
 
@@ -121,11 +122,39 @@ that does not and will not exist.
 
 - APEX OS is installable via `npm run dist` (dmg / NSIS / AppImage + deb).
 - The Risk Desk is live. The hardcoded `ACCOUNTS` array is deleted.
-- **The project has no auth users yet, so one must be created in the Supabase
-  dashboard before anyone can sign in.** Steps are in `apex-os/README.md`.
 - The app makes no third-party network calls — JetBrains Mono is bundled rather
   than fetched from Google Fonts on every launch.
 - Builds are unsigned; first launch needs a Gatekeeper/SmartScreen bypass.
+- The app icon is generated from code (`npm run icon`) rather than committed as
+  an opaque binary, and reuses the UI's own "spark" glyph coordinates so the two
+  cannot drift apart.
+
+### Windows build requires Developer Mode
+
+`npm run dist:win` unpacks `winCodeSign-2.6.0.7z`, which contains macOS symlinks.
+Creating a symlink on Windows needs a privilege standard accounts do not hold,
+so the build fails at that step (the app itself packages first — only the
+installer is lost). Fix is **Settings → System → For developers → Developer
+Mode**, or an Administrator shell.
+
+`npm run dist:win:noadmin` exists as a fallback and skips the download entirely,
+but it also skips `rcedit`, so the exe keeps the default Electron icon. Now that
+there is a real icon, Developer Mode is the preferred path.
+
+## Verification (2026-08-14/15)
+
+Confirmed working on the founder's Windows machine, not just in CI:
+
+- Supabase Auth user created in the dashboard; sign-in succeeds.
+- Risk Desk loads all six accounts (five live + one paper) and renders each
+  account's own limits — verified by switching accounts and watching the values
+  change, which is what distinguishes a live query from a replayed array.
+- `npm run dist:win` completes with Developer Mode enabled; the icon is embedded
+  (the `default Electron icon is used` warning disappears) and
+  `dist\APEX OS Setup 0.1.0.exe` is produced.
+
+Headless smoke test (`scripts/smoke.js`, 14 assertions) passes with no console
+errors or CSP violations.
 
 ## Follow-ups (not done here)
 
@@ -133,5 +162,12 @@ that does not and will not exist.
   percentage-based limits are structural until funded — the Risk Desk says so
   per-account rather than implying the limits are active.
 - The AJTG Flip Account's $150 starting capital is rendered as an explicitly
-  labelled founder note, not written into the balance field. It should become
-  real data when the account funds.
+  labelled founder note, not written into the balance field. The note is tied to
+  `balance === 0` so it clears itself once real money is recorded. Procedure for
+  recording it: `sops/operations/funding-an-account.md`. **The $15/trade figure
+  this implies (10% of $150) should be sanity-checked against real lot sizing
+  before the first trade** — the 10% was derived from an assumed 150-pip stop at
+  $1/pip on 0.01 lot XAUUSD, and if the real stop differs, `risk_limits` should
+  be corrected before trading rather than after.
+- No agent runtime exists. All 15 agents are defined but none run, and the entire
+  Super Brain page is illustrative. Both are labelled in the UI; neither is built.
